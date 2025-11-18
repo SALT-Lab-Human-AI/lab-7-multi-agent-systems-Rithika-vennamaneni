@@ -6,17 +6,14 @@ It demonstrates multi-agent collaboration by having each agent generate response
 """
 
 from datetime import datetime
-from config import Config, WorkflowConfig
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from autogen.config import Config, WorkflowConfig
 import json
 
-# Try to import OpenAI client
-try:
-    from openai import OpenAI
-except ImportError:
-    print("ERROR: OpenAI client is not installed!")
-    print("Please run: pip install -r ../requirements.txt")
-    exit(1)
-
+# Import the OpenAI client
+from openai import OpenAI
 
 class SimpleInterviewPlatformWorkflow:
     """Simplified workflow for interview platform planning"""
@@ -26,8 +23,15 @@ class SimpleInterviewPlatformWorkflow:
         if not Config.validate_setup():
             print("ERROR: Configuration validation failed!")
             exit(1)
-
-        self.client = OpenAI(api_key=Config.API_KEY, base_url=Config.API_BASE)
+            
+        # Initialize the appropriate client based on configuration
+        self.client = OpenAI(
+            api_key=Config.API_KEY,
+            base_url=Config.API_BASE
+        )
+        
+        if Config.VERBOSE:
+            print(f"Using {'Groq' if Config.USE_GROQ else 'OpenAI'} API with model: {Config.DEFAULT_MODEL}")
         self.outputs = {}
         self.model = Config.OPENAI_MODEL
 
@@ -48,7 +52,10 @@ class SimpleInterviewPlatformWorkflow:
         # Phase 3: Blueprint
         self.phase_blueprint()
 
-        # Phase 4: Review
+        # Phase 4: Go-to-Market Launch Plan
+        self.phase_launch()
+
+        # Phase 5: Review
         self.phase_review()
 
         # Summary
@@ -143,10 +150,40 @@ Create a product blueprint for our platform."""
         print("\n[BlueprintAgent Output]")
         print(self.outputs["blueprint"])
 
-    def phase_review(self):
-        """Phase 4: Strategic Review"""
+    def phase_launch(self):
+        """Phase 4: Go-to-Market Strategy"""
         print("\n" + "="*80)
-        print("PHASE 4: STRATEGIC REVIEW")
+        print("PHASE 4: GO-TO-MARKET STRATEGY")
+        print("="*80)
+        print("[LaunchAgent is planning the go-to-market strategy...]")
+
+        system_prompt = """You are a go-to-market strategist. Using the product blueprint,
+outline a concise launch plan including marketing channels, launch milestones,
+success metrics, and partnerships in under 180 words."""
+
+        user_message = f"""Product Blueprint:
+{self.outputs['blueprint']}
+
+Create a go-to-market plan for launch."""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            temperature=Config.AGENT_TEMPERATURE,
+            max_tokens=Config.AGENT_MAX_TOKENS,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        self.outputs["launch"] = response.choices[0].message.content
+        print("\n[LaunchAgent Output]")
+        print(self.outputs["launch"])
+
+    def phase_review(self):
+        """Phase 5: Strategic Review"""
+        print("\n" + "="*80)
+        print("PHASE 5: STRATEGIC REVIEW")
         print("="*80)
         print("[ReviewerAgent is providing recommendations...]")
 
@@ -156,6 +193,9 @@ Be concise - 150 words."""
 
         user_message = f"""Product Blueprint:
 {self.outputs['blueprint']}
+
+Launch Plan:
+{self.outputs['launch']}
 
 Provide strategic review and recommendations."""
 
@@ -180,11 +220,12 @@ Provide strategic review and recommendations."""
         print("="*80)
 
         print("""
-This workflow demonstrated a 4-agent collaboration:
+This workflow demonstrated a 5-agent collaboration:
 1. ResearchAgent - Analyzed the market
 2. AnalysisAgent - Identified opportunities
 3. BlueprintAgent - Designed the product
-4. ReviewerAgent - Provided strategic recommendations
+4. LaunchAgent - Built the go-to-market strategy
+5. ReviewerAgent - Provided strategic recommendations
 
 Each agent received context from the previous agent's output,
 demonstrating the sequential workflow pattern of AutoGen.
@@ -204,14 +245,19 @@ demonstrating the sequential workflow pattern of AutoGen.
         print("PHASE 2: OPPORTUNITY ANALYSIS (Full Output)")
         print("-"*80)
         print(self.outputs["analysis"])
-        
+
         print("\n" + "-"*80)
         print("PHASE 3: PRODUCT BLUEPRINT (Full Output)")
         print("-"*80)
         print(self.outputs["blueprint"])
-        
+
         print("\n" + "-"*80)
-        print("PHASE 4: STRATEGIC REVIEW (Full Output)")
+        print("PHASE 4: GO-TO-MARKET STRATEGY (Full Output)")
+        print("-"*80)
+        print(self.outputs["launch"])
+
+        print("\n" + "-"*80)
+        print("PHASE 5: STRATEGIC REVIEW (Full Output)")
         print("-"*80)
         print(self.outputs["review"])
 
@@ -241,7 +287,12 @@ demonstrating the sequential workflow pattern of AutoGen.
             f.write(self.outputs["blueprint"] + "\n")
             
             f.write("\n" + "-"*80 + "\n")
-            f.write("PHASE 4: STRATEGIC REVIEW\n")
+            f.write("PHASE 4: GO-TO-MARKET STRATEGY\n")
+            f.write("-"*80 + "\n")
+            f.write(self.outputs["launch"] + "\n")
+
+            f.write("\n" + "-"*80 + "\n")
+            f.write("PHASE 5: STRATEGIC REVIEW\n")
             f.write("-"*80 + "\n")
             f.write(self.outputs["review"] + "\n")
         
